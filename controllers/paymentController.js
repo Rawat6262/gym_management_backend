@@ -257,6 +257,114 @@ exports.recordPayment = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// Collect pending dues only — records a payment entry and reduces the member's
+// pending_amount WITHOUT touching their plan or membership end date.
+exports.collectDues = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    const { memberId, amount_paid, paymentMethod } = req.body;
+
+    const meb = await Member.findOne({ _id: memberId, role: "user" }).session(session);
+    if (!meb) throw new Error("Member not found");
+
+    const currentPending = meb.pending_amount || 0;
+
+    if (currentPending <= 0) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: `${meb.name} has no pending dues to collect.`
+      });
+    }
+
+    const amountPaid = Number(amount_paid);
+    if (isNaN(amountPaid) || amountPaid <= 0) throw new Error("Invalid amount_paid");
+
+    if (amountPaid > currentPending) {
+      await session.abortTransaction();
+      session.endSession();
+      return res.status(400).json({
+        success: false,
+        message: `Amount (₹${amountPaid}) is more than the pending dues (₹${currentPending}).`
+      });
+    }
+
+    const remainingPending = currentPending - amountPaid;
+
+    // ── Serial number (same series as plan payments) ──
+    const count = await Payment.countDocuments().session(session);
+    const document_number = `Pro_fitness/${count + 1}/25-26`;
+
+    const payment = new Payment({
+      member:            meb._id,
+      plan:              null,
+      plan_name:         "Pending Dues",
+      amount:            amountPaid,
+      paymentMethod,
+      payment_serial_no: document_number,
+      pending:           remainingPending,
+    });
+
+    const savedPayment = await payment.save({ session });
+
+    await Member.findByIdAndUpdate(
+      meb._id,
+      { pending_amount: remainingPending },
+      { session, new: true }
+    );
+
+    await session.commitTransaction();
+    session.endSession();
+
+    // ── Receipt email (failure must not undo the payment) ──
+    try {
+      const transporter = nodemailer.createTransport({
+        service: "gmail",
+        auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASS },
+      });
+
+      await transporter.sendMail({
+        from:    '"Pro Fitness Gym" <pctebca592@gmail.com>',
+        to:      meb.email,
+        subject: "Dues Payment Receipt - Pro Fitness Gym",
+        html: `
+          <h2>Pro Fitness Gym Dues Receipt</h2>
+          <p>Hello ${meb.name},</p>
+          <p><strong>Receipt No:</strong> ${document_number}</p>
+          <p><strong>Payment For:</strong> Pending Dues</p>
+          <p><strong>Amount Paid:</strong> ₹${amountPaid}</p>
+          <p><strong>Payment Date:</strong> ${new Date().toLocaleDateString()}</p>
+          ${remainingPending > 0
+            ? `<p style="color:red;"><strong>⚠️ Remaining Pending: ₹${remainingPending}</strong></p>`
+            : `<p style="color:green;"><strong>✅ All dues cleared!</strong></p>`
+          }
+        `,
+      });
+    } catch (mailErr) {
+      console.error("Dues receipt email failed:", mailErr.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Dues payment recorded",
+      payment: savedPayment,
+      pending_summary: {
+        previous_pending: currentPending,
+        paid:             amountPaid,
+        remaining:        remainingPending,
+      },
+    });
+
+  } catch (error) {
+    await session.abortTransaction();
+    session.endSession();
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 exports.getExpiredAlert = async (req, res) => {
   try {
     const today = new Date();
@@ -333,8 +441,8 @@ exports.getAllPayments = async (req, res) => {
     const formattedPayments = payments.map(p => ({
       _id: p._id,
       memberName: p.member?.name,
-      planName: p.plan?.planname,           // ✅ was p.plan?.name — should be planname
-      planPrice: p.plan?.price,             // ✅ now accessible
+      planName: p.plan?.planname || p.plan_name,  // dues payments have no plan ref
+      planPrice: p.plan?.price,
       amount: p.amount,
       pending: p.pending,
       paymentDate: p.paymentDate,

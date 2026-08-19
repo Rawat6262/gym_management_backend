@@ -6,6 +6,7 @@ const { protect } = require("../middleware/authMiddleware");
 const {
   getProfile,
   updateProfile,
+  changePassword,
   getMyMembership,
   getMyPayments,
   createRenewalRequest,
@@ -17,6 +18,7 @@ router.use(protect);
 
 router.get("/me", getProfile);
 router.put("/me", updateProfile);
+router.put("/change-password", changePassword);
 router.get("/my-membership", getMyMembership);
 router.get("/my-payments", getMyPayments);
 router.post("/renew-request", createRenewalRequest);

@@ -5,6 +5,7 @@ const { protect, adminOnly } = require("../middleware/authMiddleware");
 
 const {
   recordPayment,
+  collectDues,
   paymentHistory,
   getAllPayments
 } = require("../controllers/paymentController");
@@ -14,6 +15,7 @@ const {
 router.use(protect, adminOnly);
 
 router.post("/pay", recordPayment);
+router.post("/collect-dues", collectDues);
 router.get("/member/:id", paymentHistory);
 router.get("/getpayment", getAllPayments);
 

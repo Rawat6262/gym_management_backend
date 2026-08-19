@@ -12,10 +12,10 @@ const paymentSchema = new mongoose.Schema({
     required: true,
   },
 
+  // Optional: dues-only payments are not tied to a new plan purchase
   plan: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Plan",
-    required:true
+    ref: "Plan"
   },
   plan_name:{
     type:String,
