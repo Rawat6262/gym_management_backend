@@ -4,13 +4,13 @@ const router = express.Router();
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 
 const {
-  getDashboardStats,
-  monthlyRevenue
-} = require("../controllers/dashboardController");
+  getAllRenewals,
+  updateRenewalStatus
+} = require("../controllers/renewalController");
 
 router.use(protect, adminOnly);
 
-router.get("/stats", getDashboardStats);
-router.get("/revenue", monthlyRevenue);
+router.get("/", getAllRenewals);
+router.put("/:id", updateRenewalStatus);
 
 module.exports = router;

@@ -113,10 +113,18 @@ exports.verifyOtp = async (req, res) => {
     user.otp = null;
     user.otpExpire = null;
 
+    // Bootstrap admin: the ADMIN_EMAIL account is always promoted
+    if (
+      process.env.ADMIN_EMAIL &&
+      user.email === process.env.ADMIN_EMAIL
+    ) {
+      user.role = "admin";
+    }
+
     await user.save();
 
     const token = jwt.sign(
-      { id: user._id },
+      { id: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
@@ -125,6 +133,7 @@ exports.verifyOtp = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
+      role: user.role,
       isVerified: user.isVerified
     };
 

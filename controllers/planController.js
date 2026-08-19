@@ -48,6 +48,35 @@ exports.addPlan = async (req, res) => {
   }
 };
 
+// Delete Plan
+exports.deletePlan = async (req, res) => {
+
+  try {
+
+    const plan = await Plan.findByIdAndDelete(req.params.id);
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: "Plan not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Plan deleted"
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
+
 // Get All Plans
 exports.getPlans = async (req, res) => {
 

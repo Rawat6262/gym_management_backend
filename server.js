@@ -68,6 +68,8 @@ const planRoutes = require("./routes/planRoutes");
 const paymentRoutes = require("./routes/paymentRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
+const userRoutes = require("./routes/userRoutes");
+const renewalRoutes = require("./routes/renewalRoutes");
 
 app.use("/api/members", memberRoutes);
 app.use("/api/auth", authRoutes);
@@ -75,6 +77,8 @@ app.use("/api/plans", planRoutes);
 app.use("/api/payments", paymentRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/attendance", attendanceRoutes);
+app.use("/api/user", userRoutes);
+app.use("/api/renewals", renewalRoutes);
 
 // -----------------------------
 // Global Error Handler

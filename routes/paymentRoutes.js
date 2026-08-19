@@ -1,11 +1,17 @@
 const express = require("express");
 const router = express.Router();
 
+const { protect, adminOnly } = require("../middleware/authMiddleware");
+
 const {
   recordPayment,
   paymentHistory,
   getAllPayments
 } = require("../controllers/paymentController");
+
+// Payments are recorded and viewed by admin only
+// (members see their own history via /api/user/my-payments)
+router.use(protect, adminOnly);
 
 router.post("/pay", recordPayment);
 router.get("/member/:id", paymentHistory);

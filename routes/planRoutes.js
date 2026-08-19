@@ -1,12 +1,15 @@
 const express = require("express");
 const router = express.Router();
 
-const { addPlan, getPlans } = require("../controllers/planController");
+const { protect, adminOnly } = require("../middleware/authMiddleware");
 
-router.post("/add-plan", addPlan);
-router.get("/", getPlans);
-router.delete("/:id", async (req, res) => {
-  await Plan.findByIdAndDelete(req.params.id);
-  res.json({ success: true, message: "Plan deleted" });
-});
+const { addPlan, getPlans, deletePlan } = require("../controllers/planController");
+
+// Any logged-in user can browse plans (needed for renewal)
+router.get("/", protect, getPlans);
+
+// Only admin can create or delete plans
+router.post("/add-plan", protect, adminOnly, addPlan);
+router.delete("/:id", protect, adminOnly, deletePlan);
+
 module.exports = router;
