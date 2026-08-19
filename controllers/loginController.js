@@ -17,17 +17,12 @@ exports.loginUser = async (req, res) => {
 
     const user = await User.findOne({ email });
 
+    // Same message whether the email or password is wrong,
+    // so attackers can't probe which emails have accounts
     if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found"
-      });
-    }
-
-    if (!user.isVerified) {
       return res.status(400).json({
         success: false,
-        message: "Please verify OTP first"
+        message: "Invalid email or password"
       });
     }
 
@@ -36,7 +31,15 @@ exports.loginUser = async (req, res) => {
     if (!isMatch) {
       return res.status(400).json({
         success: false,
-        message: "Invalid password"
+        message: "Invalid email or password"
+      });
+    }
+
+    // Only reveal verification state AFTER the password matched
+    if (!user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Please verify OTP first"
       });
     }
 

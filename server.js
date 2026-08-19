@@ -11,6 +11,9 @@ dotenv.config();
 
 const app = express();
 
+// Behind Vercel/any proxy: needed so rate limiting sees real client IPs
+app.set("trust proxy", 1);
+
 // -----------------------------
 // Connect Database
 // -----------------------------

@@ -3,8 +3,11 @@ const router = express.Router();
 
 const { protect, adminOnly } = require("../middleware/authMiddleware");
 
-const { checkInMember } = require("../controllers/attendanceController");
+const { checkInMember, getTodayAttendance } = require("../controllers/attendanceController");
 
-router.post("/check-in", protect, adminOnly, checkInMember);
+router.use(protect, adminOnly);
+
+router.post("/check-in", checkInMember);
+router.get("/today", getTodayAttendance);
 
 module.exports = router;

@@ -1,4 +1,11 @@
 const Attendance = require("../models/Attendance");
+const User = require("../models/user");
+
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
 
 exports.checkInMember = async (req, res) => {
 
@@ -6,20 +13,80 @@ exports.checkInMember = async (req, res) => {
 
     const { memberId } = req.body;
 
-    const attendance = new Attendance({
-      member: memberId
+    if (!memberId) {
+      return res.status(400).json({
+        success: false,
+        message: "memberId is required"
+      });
+    }
+
+    const member = await User.findOne({ _id: memberId, role: "user" });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
+
+    // Only one check-in per member per day
+    const alreadyToday = await Attendance.findOne({
+      member: memberId,
+      checkInTime: { $gte: startOfToday() }
     });
 
-    await attendance.save();
+    if (alreadyToday) {
+      return res.status(400).json({
+        success: false,
+        message: `${member.name} has already checked in today`
+      });
+    }
+
+    const expired =
+      member.membershipEndDate &&
+      new Date(member.membershipEndDate) < new Date();
+
+    await Attendance.create({ member: memberId });
 
     res.json({
       success: true,
-      message: "Member checked in"
+      message: expired
+        ? `${member.name} checked in — ⚠️ membership expired, ask them to renew`
+        : `${member.name} checked in`,
+      membershipExpired: !!expired
     });
 
   } catch (error) {
 
     res.status(500).json({
+      message: error.message
+    });
+
+  }
+
+};
+
+// Today's check-ins (admin)
+exports.getTodayAttendance = async (req, res) => {
+
+  try {
+
+    const records = await Attendance.find({
+      checkInTime: { $gte: startOfToday() }
+    })
+      .populate("member", "name phone email membershipEndDate")
+      .sort({ checkInTime: -1 });
+
+    res.json({
+      success: true,
+      count: records.length,
+      records
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
       message: error.message
     });
 

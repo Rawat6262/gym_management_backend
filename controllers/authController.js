@@ -74,6 +74,54 @@ exports.createUser = async (req, res) => {
 
   }
 };
+// Resend OTP to an unverified account
+exports.resendOtp = async (req, res) => {
+  try {
+
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "No signup found for this email. Please sign up first."
+      });
+    }
+
+    if (user.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "Account already verified. Please login."
+      });
+    }
+
+    user.otp = generateOtp();
+    user.otpExpire = new Date(Date.now() + 5 * 60 * 1000);
+    await user.save();
+
+    await sendEmail(email, user.otp);
+
+    res.json({
+      success: true,
+      message: "A new OTP has been sent to your email"
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 const jwt = require("jsonwebtoken");
 
 exports.verifyOtp = async (req, res) => {
