@@ -1,7 +1,13 @@
-// const Member = require("../models/Member");
-
-const Member = require("../models/Member");
+const User = require("../models/user");
 const Plan = require("../models/Plan");
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+
+// Members ARE users with role "user".
+// Admin-created members get a random placeholder password and isVerified:false;
+// the member can later sign up with the same email to set their own password.
+
+const SAFE_FIELDS = "-password -otp -otpExpire";
 
 exports.addMember = async (req, res) => {
   try {
@@ -24,6 +30,15 @@ exports.addMember = async (req, res) => {
       });
     }
 
+    const existing = await User.findOne({ email });
+
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: "A user with this email already exists"
+      });
+    }
+
     let membershipEndDate = null;
 
     // If plan is provided calculate membership end date
@@ -38,29 +53,39 @@ exports.addMember = async (req, res) => {
         });
       }
 
-      // const joinDate = new Date();
-
       membershipEndDate = new Date();
       membershipEndDate.setDate(
         membershipEndDate.getDate() + planData.duration
       );
     }
 
-    const member = await Member.create({
+    // Placeholder password — replaced when the member signs up with this email
+    const randomPassword = crypto.randomBytes(16).toString("hex");
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    const member = await User.create({
       name,
       phone,
       email,
       age,
       gender,
       address,
-      plan,
-      membershipEndDate
+      plan: plan || null,
+      membershipEndDate,
+      role: "user",
+      password: hashedPassword,
+      isVerified: false
     });
+
+    const data = member.toObject();
+    delete data.password;
+    delete data.otp;
+    delete data.otpExpire;
 
     res.status(201).json({
       success: true,
       message: "Member added successfully",
-      data: member
+      data
     });
 
   } catch (error) {
@@ -72,15 +97,38 @@ exports.addMember = async (req, res) => {
 
   }
 };
-// Update Member
+
+// Update Member (whitelisted fields only — never role/password from here)
 exports.updateMember = async (req, res) => {
   try {
 
-    const member = await Member.findByIdAndUpdate(
-      req.params.id,
-      req.body,
+    const allowed = [
+      "name", "phone", "email", "age", "gender",
+      "address", "plan", "membershipEndDate", "photo", "pending_amount"
+    ];
+
+    const updates = {};
+    for (const field of allowed) {
+      if (req.body[field] !== undefined && req.body[field] !== "") {
+        updates[field] = req.body[field];
+      }
+    }
+
+    // Allow clearing the plan
+    if (req.body.plan === "") updates.plan = null;
+
+    const member = await User.findOneAndUpdate(
+      { _id: req.params.id, role: "user" },
+      updates,
       { new: true }
-    );
+    ).select(SAFE_FIELDS);
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -96,11 +144,21 @@ exports.updateMember = async (req, res) => {
   }
 };
 
-// Delete Member
+// Delete Member (cannot delete admins from here)
 exports.deleteMember = async (req, res) => {
   try {
 
-    await Member.findByIdAndDelete(req.params.id);
+    const member = await User.findOneAndDelete({
+      _id: req.params.id,
+      role: "user"
+    });
+
+    if (!member) {
+      return res.status(404).json({
+        success: false,
+        message: "Member not found"
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -121,9 +179,10 @@ exports.getExpiredMembers = async (req, res) => {
 
     const today = new Date();
 
-    const members = await Member.find({
+    const members = await User.find({
+      role: "user",
       membershipEndDate: { $lt: today }
-    });
+    }).select(SAFE_FIELDS);
 
     res.json({
       success: true,
@@ -150,12 +209,13 @@ exports.expiringSoon = async (req, res) => {
 
     next7Days.setDate(today.getDate() + 7);
 
-    const members = await Member.find({
+    const members = await User.find({
+      role: "user",
       membershipEndDate: {
         $gte: today,
         $lte: next7Days
       }
-    });
+    }).select(SAFE_FIELDS);
 
     res.json({
       success: true,
@@ -171,20 +231,24 @@ exports.expiringSoon = async (req, res) => {
   }
 
 };
-exports.getMembers =async(req,res)=>{
-  try{
 
-    let data = await Member.find({}).populate('plan','planname')
+exports.getMembers = async (req, res) => {
+  try {
+
+    let data = await User.find({ role: "user" })
+      .select(SAFE_FIELDS)
+      .populate("plan", "planname price duration");
+
     res.status(200).json({
       success: true,
       message: "all members",
-      data:data
+      data: data
     });
   }
-catch (error) {
+  catch (error) {
 
     res.status(500).json({
       message: error.message
     });
   }
-}
+};

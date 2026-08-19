@@ -10,9 +10,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true
   },
-  password:{
-    type:String,
-    required:true
+
+  password: {
+    type: String,
+    required: true
   },
 
   phone: {
@@ -23,6 +24,42 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ["admin", "user"],
     default: "user"
+  },
+
+  // ── Membership fields (users with role "user" ARE the gym members) ──
+  age: {
+    type: Number
+  },
+
+  gender: {
+    type: String
+  },
+
+  address: {
+    type: String
+  },
+
+  joinDate: {
+    type: Date,
+    default: Date.now
+  },
+
+  membershipEndDate: {
+    type: Date
+  },
+
+  plan: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Plan"
+  },
+
+  photo: {
+    type: String
+  },
+
+  pending_amount: {
+    type: Number,
+    default: 0
   },
 
   isVerified: {

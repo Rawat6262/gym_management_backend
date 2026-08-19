@@ -10,7 +10,7 @@ const renewalRequestSchema = new mongoose.Schema({
 
   member: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Member",
+    ref: "User",
     required: true
   },
 

@@ -1,6 +1,7 @@
 const Payment = require("../models/Payment");
 const Plan = require("../models/Plan");
-const Member = require("../models/Member");
+// Members are now users with role "user"
+const Member = require("../models/user");
 
 const mongoose = require("mongoose");
 const nodemailer = require("nodemailer");
@@ -261,11 +262,13 @@ exports.getExpiredAlert = async (req, res) => {
     const today = new Date();
  
     const expired = await Member.find({
+      role: "user",
       membershipEndDate: { $lt: today }
     }).select("name phone email membershipEndDate pending_amount plan")
       .populate("plan", "planname price");
- 
+
     const expiringSoon = await Member.find({
+      role: "user",
       membershipEndDate: {
         $gte: today,
         $lte: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000) // next 7 days
@@ -296,7 +299,7 @@ exports.paymentHistory = async (req, res) => {
     const payments = await Payment.find({
       member: req.params.id
     })
-      .populate("member")
+      .populate("member", "name email phone membershipEndDate pending_amount")
       .populate("plan")
       .sort({ paymentDate: -1 });
 

@@ -1,17 +1,20 @@
-const Member = require("../models/Member");
+// Members are now users with role "user"
+const Member = require("../models/user");
 const Payment = require("../models/Payment");
 
 exports.getDashboardStats = async (req, res) => {
 
   try {
 
-    const totalMembers = await Member.countDocuments();
+    const totalMembers = await Member.countDocuments({ role: "user" });
 
     const activeMembers = await Member.countDocuments({
+      role: "user",
       membershipEndDate: { $gte: new Date() }
     });
 
     const expiredMembers = await Member.countDocuments({
+      role: "user",
       membershipEndDate: { $lt: new Date() }
     });
 

@@ -18,6 +18,14 @@ exports.createUser = async (req, res) => {
 
     const existingUser = await User.findOne({ email });
 
+    // A verified account can never be overwritten by a new signup
+    if (existingUser && existingUser.isVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "An account with this email already exists. Please login."
+      });
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const otp = generateOtp();
@@ -27,9 +35,11 @@ exports.createUser = async (req, res) => {
 
     if (existingUser) {
 
-      // update existing unverified user
+      // Unverified user — either a repeat signup or a member the admin
+      // pre-created: they claim the account by setting their own password.
+      // Membership fields (plan, end date, pending amount) are kept.
       existingUser.name = name;
-      existingUser.password = hashedPassword; // ✅ FIX
+      existingUser.password = hashedPassword;
       existingUser.otp = otp;
       existingUser.otpExpire = otpExpire;
 

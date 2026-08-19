@@ -1,15 +1,18 @@
 const User = require("../models/user");
-const Member = require("../models/Member");
 const Payment = require("../models/Payment");
 const Plan = require("../models/Plan");
 const RenewalRequest = require("../models/RenewalRequest");
+
+const SAFE_FIELDS = "-password -otp -otpExpire";
 
 // Get logged in user profile
 exports.getProfile = async (req, res) => {
 
   try {
 
-    const user = await User.findById(req.user.id).select("-password -otp -otpExpire");
+    const user = await User.findById(req.user.id)
+      .select(SAFE_FIELDS)
+      .populate("plan", "planname price duration");
 
     res.json({
       success: true,
@@ -42,7 +45,7 @@ exports.updateProfile = async (req, res) => {
       req.user.id,
       updates,
       { new: true }
-    ).select("-password -otp -otpExpire");
+    ).select(SAFE_FIELDS);
 
     res.json({
       success: true,
@@ -59,23 +62,14 @@ exports.updateProfile = async (req, res) => {
 
 };
 
-// Find the gym Member record linked to the logged-in account (matched by email)
-const findMyMember = (email) =>
-  Member.findOne({ email }).populate("plan");
-
-// Get my membership details (plan, end date, days left, status)
+// Get my membership details — the logged-in user IS the member
 exports.getMyMembership = async (req, res) => {
 
   try {
 
-    const member = await findMyMember(req.user.email);
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: "No gym membership is linked to your account yet. Please contact the gym admin."
-      });
-    }
+    const member = await User.findById(req.user.id)
+      .select(SAFE_FIELDS)
+      .populate("plan");
 
     const today = new Date();
     let daysLeft = null;
@@ -115,16 +109,7 @@ exports.getMyPayments = async (req, res) => {
 
   try {
 
-    const member = await Member.findOne({ email: req.user.email });
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: "No gym membership is linked to your account yet."
-      });
-    }
-
-    const payments = await Payment.find({ member: member._id })
+    const payments = await Payment.find({ member: req.user.id })
       .populate("plan", "planname price duration")
       .sort({ paymentDate: -1 });
 
@@ -158,15 +143,6 @@ exports.createRenewalRequest = async (req, res) => {
       });
     }
 
-    const member = await Member.findOne({ email: req.user.email });
-
-    if (!member) {
-      return res.status(404).json({
-        success: false,
-        message: "No gym membership is linked to your account yet. Please contact the gym admin."
-      });
-    }
-
     const plan = await Plan.findById(planId);
 
     if (!plan) {
@@ -177,7 +153,7 @@ exports.createRenewalRequest = async (req, res) => {
     }
 
     const existing = await RenewalRequest.findOne({
-      member: member._id,
+      member: req.user.id,
       status: "pending"
     });
 
@@ -190,7 +166,7 @@ exports.createRenewalRequest = async (req, res) => {
 
     const request = await RenewalRequest.create({
       user: req.user.id,
-      member: member._id,
+      member: req.user.id,
       plan: plan._id
     });
 
