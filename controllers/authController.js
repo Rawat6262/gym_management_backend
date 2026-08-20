@@ -122,6 +122,100 @@ exports.resendOtp = async (req, res) => {
   }
 };
 
+// Forgot password — send an OTP to the account's email.
+// Response is the same whether or not the account exists (anti-enumeration).
+exports.forgotPassword = async (req, res) => {
+  try {
+
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required"
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (user) {
+      user.otp = generateOtp();
+      user.otpExpire = new Date(Date.now() + 5 * 60 * 1000);
+      await user.save();
+
+      await sendEmail(email, user.otp);
+    }
+
+    res.json({
+      success: true,
+      message: "If an account with this email exists, an OTP has been sent to it."
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// Reset password using the OTP from forgotPassword
+exports.resetPassword = async (req, res) => {
+  try {
+
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: "Email, OTP and new password are required"
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: "Password must be at least 6 characters"
+      });
+    }
+
+    const user = await User.findOne({ email });
+
+    if (!user || !user.otp || user.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid OTP"
+      });
+    }
+
+    if (user.otpExpire < Date.now()) {
+      return res.status(400).json({
+        success: false,
+        message: "OTP expired. Please request a new one."
+      });
+    }
+
+    user.password = await bcrypt.hash(newPassword, 10);
+    user.otp = null;
+    user.otpExpire = null;
+    // Entering the emailed OTP proves ownership of the email
+    user.isVerified = true;
+
+    await user.save();
+
+    res.json({
+      success: true,
+      message: "Password reset successfully. Please login with your new password."
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 const jwt = require("jsonwebtoken");
 
 exports.verifyOtp = async (req, res) => {
