@@ -48,6 +48,43 @@ exports.addPlan = async (req, res) => {
   }
 };
 
+// Update Plan (price, duration, description, benefits, active flag)
+exports.updatePlan = async (req, res) => {
+
+  try {
+
+    const allowed = ["planname", "duration", "price", "description", "benefits", "isActive"];
+
+    const updates = {};
+    for (const field of allowed) {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    }
+
+    const plan = await Plan.findByIdAndUpdate(req.params.id, updates, { new: true });
+
+    if (!plan) {
+      return res.status(404).json({
+        success: false,
+        message: "Plan not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Plan updated",
+      plan
+    });
+
+  } catch (error) {
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+};
+
 // Delete Plan
 exports.deletePlan = async (req, res) => {
 

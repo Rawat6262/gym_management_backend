@@ -73,7 +73,12 @@ const dashboardRoutes = require("./routes/dashboardRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 const userRoutes = require("./routes/userRoutes");
 const renewalRoutes = require("./routes/renewalRoutes");
+const publicRoutes = require("./routes/publicRoutes");
+const trainerRoutes = require("./routes/trainerRoutes");
+const galleryRoutes = require("./routes/galleryRoutes");
+const websiteRoutes = require("./routes/websiteRoutes");
 
+app.use("/api/public", publicRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/plans", planRoutes);
@@ -82,6 +87,9 @@ app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/user", userRoutes);
 app.use("/api/renewals", renewalRoutes);
+app.use("/api/trainers", trainerRoutes);
+app.use("/api/gallery", galleryRoutes);
+app.use("/api/website", websiteRoutes);
 
 // -----------------------------
 // Global Error Handler
