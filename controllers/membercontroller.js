@@ -2,6 +2,7 @@ const User = require("../models/user");
 const Plan = require("../models/Plan");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const { sendWelcomeEmail } = require("../utils/sendMail");
 
 // Members ARE users with role "user".
 // Admin-created members get a random placeholder password and isVerified:false;
@@ -81,6 +82,11 @@ exports.addMember = async (req, res) => {
     delete data.password;
     delete data.otp;
     delete data.otpExpire;
+
+    // Welcome email — a mail failure must not block adding the member
+    sendWelcomeEmail(member.email, { name: member.name, needsSignup: true }).catch((mailErr) =>
+      console.error("Welcome email failed:", mailErr.message)
+    );
 
     res.status(201).json({
       success: true,

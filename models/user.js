@@ -73,6 +73,23 @@ const userSchema = new mongoose.Schema({
 
   otpExpire: {
     type: Date
+  },
+
+  // ── OTP send throttling (hidden from queries unless selected) ──
+  otpLastSentAt: {
+    type: Date,
+    select: false
+  },
+
+  otpSendCount: {
+    type: Number,
+    default: 0,
+    select: false
+  },
+
+  otpWindowStart: {
+    type: Date,
+    select: false
   }
 
 }, { timestamps: true });

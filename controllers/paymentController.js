@@ -4,7 +4,7 @@ const Plan = require("../models/Plan");
 const Member = require("../models/user");
 
 const mongoose = require("mongoose");
-const nodemailer = require("nodemailer");
+const { sendPaymentReceipt, sendDuesReceipt } = require("../utils/sendMail");
 
 // exports.recordPayment = async (req, res) => {
 //   const session = await mongoose.startSession();
@@ -205,36 +205,24 @@ exports.recordPayment = async (req, res) => {
       { session, new: true }
     );
  
-    // ── Send Email ──
-    if (savedPayment) {
-      let transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASS },
-      });
- 
-      await transporter.sendMail({
-        from:    '"Pro Fitness Gym" <pctebca592@gmail.com>',
-        to:      meb.email,
-        subject: "Gym Payment Receipt - Pro Fitness Gym",
-        html: `
-          <h2>Pro Fitness Gym Payment Receipt</h2>
-          <p>Hello ${meb.name},</p>
-          <p><strong>Plan:</strong> ${plan.planname}</p>
-          <p><strong>Plan Price:</strong> ₹${planPrice}</p>
-          <p><strong>Amount Paid:</strong> ₹${amountPaid}</p>
-          <p><strong>Payment Date:</strong> ${new Date().toLocaleDateString()}</p>
-          <p><strong>Next Due Date:</strong> ${nextDueDate.toLocaleDateString()}</p>
-          ${totalPending > 0
-            ? `<p style="color:red;"><strong>⚠️ Pending Balance: ₹${totalPending}</strong></p>`
-            : `<p style="color:green;"><strong>✅ No pending dues!</strong></p>`
-          }
-        `,
-      });
-    }
- 
     await session.commitTransaction();
     session.endSession();
- 
+
+    // ── Receipt email (failure must not undo the payment) ──
+    try {
+      await sendPaymentReceipt(meb.email, {
+        name:        meb.name,
+        receiptNo:   document_number,
+        planName:    plan.planname,
+        planPrice,
+        amountPaid,
+        nextDueDate,
+        totalPending,
+      });
+    } catch (mailErr) {
+      console.error("Payment receipt email failed:", mailErr.message);
+    }
+
     res.status(201).json({
       success: true,
       message: "Payment recorded",
@@ -321,27 +309,11 @@ exports.collectDues = async (req, res) => {
 
     // ── Receipt email (failure must not undo the payment) ──
     try {
-      const transporter = nodemailer.createTransport({
-        service: "gmail",
-        auth: { user: process.env.EMAIL, pass: process.env.EMAIL_PASS },
-      });
-
-      await transporter.sendMail({
-        from:    '"Pro Fitness Gym" <pctebca592@gmail.com>',
-        to:      meb.email,
-        subject: "Dues Payment Receipt - Pro Fitness Gym",
-        html: `
-          <h2>Pro Fitness Gym Dues Receipt</h2>
-          <p>Hello ${meb.name},</p>
-          <p><strong>Receipt No:</strong> ${document_number}</p>
-          <p><strong>Payment For:</strong> Pending Dues</p>
-          <p><strong>Amount Paid:</strong> ₹${amountPaid}</p>
-          <p><strong>Payment Date:</strong> ${new Date().toLocaleDateString()}</p>
-          ${remainingPending > 0
-            ? `<p style="color:red;"><strong>⚠️ Remaining Pending: ₹${remainingPending}</strong></p>`
-            : `<p style="color:green;"><strong>✅ All dues cleared!</strong></p>`
-          }
-        `,
+      await sendDuesReceipt(meb.email, {
+        name:      meb.name,
+        receiptNo: document_number,
+        amountPaid,
+        remainingPending,
       });
     } catch (mailErr) {
       console.error("Dues receipt email failed:", mailErr.message);

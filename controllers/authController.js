@@ -1,8 +1,39 @@
 const User = require("../models/user");
 const generateOtp = require("../utils/genrateOtp");
-const sendEmail = require("../utils/sendMail");
+const { sendOtpEmail, sendWelcomeEmail } = require("../utils/sendMail");
 
 const bcrypt = require("bcryptjs");
+
+// Sending many OTPs to one inbox quickly hurts sender reputation and
+// pushes mail into spam, so each account is throttled.
+const OTP_COOLDOWN_MS = 60 * 1000;          // 1 minute between sends
+const OTP_WINDOW_MS = 60 * 60 * 1000;       // per 1 hour…
+const OTP_MAX_PER_WINDOW = 5;               // …at most 5 OTPs
+const OTP_THROTTLE_FIELDS = "+otpLastSentAt +otpSendCount +otpWindowStart";
+
+// Returns an error message if the user may not get another OTP yet,
+// otherwise records this send on the user (caller saves).
+const checkOtpThrottle = (user) => {
+  const now = Date.now();
+
+  if (user.otpLastSentAt && now - user.otpLastSentAt < OTP_COOLDOWN_MS) {
+    const wait = Math.ceil((OTP_COOLDOWN_MS - (now - user.otpLastSentAt)) / 1000);
+    return `Please wait ${wait} seconds before requesting another OTP.`;
+  }
+
+  if (!user.otpWindowStart || now - user.otpWindowStart > OTP_WINDOW_MS) {
+    user.otpWindowStart = new Date(now);
+    user.otpSendCount = 0;
+  }
+
+  if (user.otpSendCount >= OTP_MAX_PER_WINDOW) {
+    return "Too many OTP requests. Please try again after an hour.";
+  }
+
+  user.otpSendCount += 1;
+  user.otpLastSentAt = new Date(now);
+  return null;
+};
 
 exports.createUser = async (req, res) => {
   try {
@@ -16,7 +47,7 @@ exports.createUser = async (req, res) => {
       });
     }
 
-    const existingUser = await User.findOne({ email });
+    const existingUser = await User.findOne({ email }).select(OTP_THROTTLE_FIELDS);
 
     // A verified account can never be overwritten by a new signup
     if (existingUser && existingUser.isVerified) {
@@ -34,6 +65,11 @@ exports.createUser = async (req, res) => {
     let user;
 
     if (existingUser) {
+
+      const throttled = checkOtpThrottle(existingUser);
+      if (throttled) {
+        return res.status(429).json({ success: false, message: throttled });
+      }
 
       // Unverified user — either a repeat signup or a member the admin
       // pre-created: they claim the account by setting their own password.
@@ -53,12 +89,15 @@ exports.createUser = async (req, res) => {
         email,
         password: hashedPassword, // ✅ FIX
         otp,
-        otpExpire
+        otpExpire,
+        otpLastSentAt: new Date(),
+        otpSendCount: 1,
+        otpWindowStart: new Date()
       });
 
     }
 
-    await sendEmail(email, otp);
+    await sendOtpEmail(email, otp, { name, purpose: "signup" });
 
     res.status(200).json({
       success: true,
@@ -87,7 +126,7 @@ exports.resendOtp = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select(OTP_THROTTLE_FIELDS);
 
     if (!user) {
       return res.status(404).json({
@@ -103,11 +142,16 @@ exports.resendOtp = async (req, res) => {
       });
     }
 
+    const throttled = checkOtpThrottle(user);
+    if (throttled) {
+      return res.status(429).json({ success: false, message: throttled });
+    }
+
     user.otp = generateOtp();
     user.otpExpire = new Date(Date.now() + 5 * 60 * 1000);
     await user.save();
 
-    await sendEmail(email, user.otp);
+    await sendOtpEmail(email, user.otp, { name: user.name, purpose: "signup" });
 
     res.json({
       success: true,
@@ -136,14 +180,15 @@ exports.forgotPassword = async (req, res) => {
       });
     }
 
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select(OTP_THROTTLE_FIELDS);
 
-    if (user) {
+    // Throttled requests get the same generic response (anti-enumeration)
+    if (user && !checkOtpThrottle(user)) {
       user.otp = generateOtp();
       user.otpExpire = new Date(Date.now() + 5 * 60 * 1000);
       await user.save();
 
-      await sendEmail(email, user.otp);
+      await sendOtpEmail(email, user.otp, { name: user.name, purpose: "reset" });
     }
 
     res.json({
@@ -274,6 +319,11 @@ exports.verifyOtp = async (req, res) => {
     }
 
     await user.save();
+
+    // Welcome email — a mail failure must not block the login
+    sendWelcomeEmail(user.email, { name: user.name }).catch((mailErr) =>
+      console.error("Welcome email failed:", mailErr.message)
+    );
 
     const token = jwt.sign(
       { id: user._id, role: user.role },
